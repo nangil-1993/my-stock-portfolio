@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MY STOCK · 포트폴리오 대시보드</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0a0e1a; --surface: #111827; --border: rgba(255,255,255,0.07);
+    --text: #e2e8f0; --muted: #4a5568; --green: #00e5a0; --red: #ff6b6b; --blue: #60a5fa;
+  }
+  body { background: var(--bg); color: var(--text); font-family: 'Syne', sans-serif; min-height: 100vh; padding: 32px 24px; max-width: 1100px; margin: 0 auto; }
+
+  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 36px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
+  .logo { font-size: 24px; font-weight: 700; letter-spacing: -0.5px; }
+  .logo span { color: var(--green); }
+  .header-meta { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+  .updated { font-size: 12px; color: var(--muted); font-family: 'DM Mono', monospace; }
+  .refresh-btn { background: rgba(0,229,160,0.1); border: 1px solid rgba(0,229,160,0.2); color: var(--green); font-family: 'Syne', sans-serif; font-size: 13px; padding: 6px 16px; border-radius: 8px; cursor: pointer; transition: background 0.2s; }
+  .refresh-btn:hover { background: rgba(0,229,160,0.2); }
+  .refresh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .loading-bar { width: 100%; height: 2px; background: rgba(0,229,160,0.1); border-radius: 2px; margin-bottom: 24px; overflow: hidden; display: none; }
+  .loading-bar.active { display: block; }
+  .loading-bar::after { content: ''; display: block; height: 100%; width: 40%; background: var(--green); border-radius: 2px; animation: slide 1s infinite; }
+  @keyframes slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(350%); } }
+
+  .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+  .metric { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px; }
+  .metric-label { font-size: 11px; color: var(--muted); letter-spacing: 0.8px; text-transform: uppercase; margin-bottom: 10px; }
+  .metric-value { font-size: 22px; font-weight: 700; font-family: 'DM Mono', monospace; letter-spacing: -0.5px; }
+  .metric-value.up { color: var(--green); }
+  .metric-value.down { color: var(--red); }
+  .metric-sub { font-size: 12px; color: var(--muted); margin-top: 6px; font-family: 'DM Mono', monospace; }
+
+  .grid2 { display: grid; grid-template-columns: 1.5fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 24px; }
+  .card-title { font-size: 11px; color: var(--muted); letter-spacing: 0.8px; text-transform: uppercase; margin-bottom: 18px; font-weight: 500; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th { text-align: left; padding: 0 8px 12px; color: var(--muted); font-size: 11px; letter-spacing: 0.6px; text-transform: uppercase; font-weight: 500; border-bottom: 1px solid rgba(255,255,255,0.06); }
+  tbody td { padding: 11px 8px; border-bottom: 1px solid rgba(255,255,255,0.04); }
+  tbody tr:last-child td { border-bottom: none; }
+  .ticker { color: var(--blue); font-family: 'DM Mono', monospace; font-weight: 500; font-size: 12px; }
+  .price-cell { font-family: 'DM Mono', monospace; }
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 5px; font-size: 12px; font-family: 'DM Mono', monospace; font-weight: 500; }
+  .badge.up { background: rgba(0,229,160,0.1); color: var(--green); }
+  .badge.down { background: rgba(255,107,107,0.1); color: var(--red); }
+
+  .watch-item { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+  .watch-item:last-child { border-bottom: none; }
+  .watch-ticker { font-size: 13px; font-weight: 600; color: var(--text); font-family: 'DM Mono', monospace; }
+  .watch-name { font-size: 11px; color: var(--muted); margin-top: 3px; }
+  .watch-price { font-family: 'DM Mono', monospace; font-size: 14px; font-weight: 500; text-align: right; }
+  .watch-change { font-size: 12px; margin-top: 3px; text-align: right; font-family: 'DM Mono', monospace; }
+  .up { color: var(--green); } .down { color: var(--red); }
+
+  .chart-wrap { position: relative; width: 100%; height: 220px; }
+
+  .error-msg { background: rgba(255,107,107,0.1); border: 1px solid rgba(255,107,107,0.2); color: var(--red); border-radius: 10px; padding: 16px; margin-bottom: 16px; font-size: 13px; display: none; }
+
+  .fab { position: fixed; bottom: 28px; right: 28px; width: 52px; height: 52px; background: var(--green); color: #0a0e1a; border: none; border-radius: 50%; font-size: 26px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 20px rgba(0,229,160,0.3); transition: transform 0.2s; font-family: 'Syne', sans-serif; font-weight: 700; }
+  .fab:hover { transform: scale(1.08); }
+
+  .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 100; align-items: center; justify-content: center; }
+  .modal-bg.open { display: flex; }
+  .modal { background: #151d2e; border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 28px; width: 480px; max-width: 95vw; }
+  .modal h2 { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+  .modal p { font-size: 13px; color: var(--muted); margin-bottom: 20px; }
+  .modal label { font-size: 12px; color: var(--muted); letter-spacing: 0.6px; display: block; margin-bottom: 6px; text-transform: uppercase; }
+  .modal input { width: 100%; background: var(--bg); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 10px 14px; color: var(--text); font-family: 'DM Mono', monospace; font-size: 14px; margin-bottom: 16px; outline: none; }
+  .modal input:focus { border-color: var(--green); }
+  .modal-btns { display: flex; gap: 10px; justify-content: flex-end; margin-top: 4px; }
+  .btn-cancel { padding: 10px 20px; border: 1px solid rgba(255,255,255,0.15); background: transparent; color: var(--muted); border-radius: 8px; cursor: pointer; font-family: 'Syne', sans-serif; font-size: 13px; }
+  .btn-add { padding: 10px 20px; border: none; background: var(--green); color: #0a0e1a; border-radius: 8px; cursor: pointer; font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 600; }
+
+  @media (max-width: 700px) {
+    .metrics { grid-template-columns: repeat(2, 1fr); }
+    .grid2 { grid-template-columns: 1fr; }
+    .header { flex-direction: column; align-items: flex-start; gap: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">MY<span>STOCK</span> · 포트폴리오</div>
+  <div class="header-meta">
+    <div class="updated" id="lastUpdate">데이터 로딩 중...</div>
+    <button class="refresh-btn" id="refreshBtn" onclick="loadData()">↻ 새로고침</button>
+  </div>
+</div>
+
+<div class="loading-bar" id="loadingBar"></div>
+<div class="error-msg" id="errorMsg"></div>
+
+<div class="metrics">
+  <div class="metric"><div class="metric-label">총 평가금액</div><div class="metric-value" id="totalValue">—</div><div class="metric-sub" id="totalBuy">—</div></div>
+  <div class="metric"><div class="metric-label">총 수익</div><div class="metric-value" id="totalProfit">—</div><div class="metric-sub" id="totalPct">—</div></div>
+  <div class="metric"><div class="metric-label">보유 종목 수</div><div class="metric-value" id="holdCount">—</div><div class="metric-sub" id="holdSub">—</div></div>
+  <div class="metric"><div class="metric-label">관심 종목 수</div><div class="metric-value" id="watchCount">—</div><div class="metric-sub">실시간 모니터링</div></div>
+</div>
+
+<div class="grid2">
+  <div class="card">
+    <div class="card-title">보유 종목</div>
+    <table>
+      <thead><tr><th>코드</th><th>종목명</th><th>수량</th><th>매입가</th><th>현재가</th><th>수익률</th></tr></thead>
+      <tbody id="holdingsTbody"><tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px">로딩 중...</td></tr></tbody>
+    </table>
+  </div>
+  <div class="card">
+    <div class="card-title">관심 종목</div>
+    <div id="watchlistDiv"><div style="text-align:center;color:var(--muted);padding:24px;font-size:13px">로딩 중...</div></div>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:80px">
+  <div class="card-title">수익률 추이 (최근 6개월)</div>
+  <div class="chart-wrap"><canvas id="perfChart" role="img" aria-label="6개월 포트폴리오 수익률 추이">수익률 차트</canvas></div>
+</div>
+
+<button class="fab" onclick="openModal()" title="Google Sheets 연동 안내">?</button>
+
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <h2>📊 데이터 수정 방법</h2>
+    <p>종목 추가/수정/삭제는 Google Sheets에서 직접 하면 자동으로 반영됩니다.</p>
+    <label>Google Sheets 바로가기</label>
+    <input id="sheetsUrl" value="https://docs.google.com/spreadsheets" readonly>
+    <div style="font-size:13px;color:var(--muted);line-height:1.7;margin-bottom:16px">
+      · Sheet1: 보유 종목 (ticker, name, qty, buyPrice, currency)<br>
+      · Sheet2: 관심 종목 (ticker, name, currency)<br>
+      · 수정 후 새로고침 버튼을 누르면 반영돼요
+    </div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal()">닫기</button>
+      <button class="btn-add" onclick="window.open('https://docs.google.com/spreadsheets')">Sheets 열기</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── 구글 앱스스크립트 URL ──────────────────────────
+const API_URL = 'https://script.google.com/macros/s/AKfycbyHyNaMkbj4ylmbAB8lDGiECUJD_T5ZM6CWwms2B2HJgwM9JwdMp3-t7lG-5qhxesMd/exec';
+const USD_KRW = 1350; // 환율 (원하시면 수동으로 수정)
+
+// 수익률 히스토리 (Google Sheets에 history 시트 추가 전까지 수동 관리)
+const perfHistory = {
+  labels: ['12월','1월','2월','3월','4월','5월'],
+  data:   [0, 4.2, 7.8, 12.1, 18.5, null] // null → 오늘 계산값으로 자동 대체
+};
+
+let perfChartInst = null;
+
+// ── FORMAT ───────────────────────────────────────
+function fmt(n, currency) {
+  if (!n && n !== 0) return '—';
+  if (currency === 'KRW') return '₩' + Math.round(n).toLocaleString('ko-KR');
+  return '$' + Number(n).toFixed(2);
+}
+function fmtPct(n) {
+  const s = (n >= 0 ? '+' : '') + Number(n).toFixed(2) + '%';
+  return s;
+}
+
+// ── LOAD DATA ────────────────────────────────────
+async function loadData() {
+  const btn = document.getElementById('refreshBtn');
+  const bar = document.getElementById('loadingBar');
+  const err = document.getElementById('errorMsg');
+
+  btn.disabled = true;
+  btn.textContent = '로딩 중...';
+  bar.classList.add('active');
+  err.style.display = 'none';
+
+  try {
+    const res = await fetch(API_URL);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+
+    renderHoldings(data.holdings || []);
+    renderWatchlist(data.watchlist || []);
+    renderChart(data.holdings || []);
+
+    const now = new Date(data.updatedAt || Date.now());
+    document.getElementById('lastUpdate').textContent =
+      '마지막 업데이트: ' + now.toLocaleDateString('ko-KR') + ' ' + now.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+
+  } catch(e) {
+    err.style.display = 'block';
+    err.textContent = '⚠ 데이터를 불러오지 못했습니다. Google Apps Script 배포 설정을 확인해주세요. (' + e.message + ')';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '↻ 새로고침';
+    bar.classList.remove('active');
+  }
+}
+
+// ── RENDER HOLDINGS ──────────────────────────────
+function renderHoldings(holdings) {
+  const tbody = document.getElementById('holdingsTbody');
+  if (!holdings.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px">보유 종목 없음</td></tr>';
+    return;
+  }
+
+  let totalBuyKRW = 0, totalEvalKRW = 0;
+  let rows = '';
+
+  holdings.forEach(h => {
+    const cur = h.currentPrice || 0;
+    const buyTotal = h.buyPrice * h.qty;
+    const evalTotal = cur * h.qty;
+    const rate = h.currency === 'KRW' ? 1 : USD_KRW;
+    totalBuyKRW  += buyTotal * rate;
+    totalEvalKRW += evalTotal * rate;
+
+    const pct = h.buyPrice > 0 ? ((cur - h.buyPrice) / h.buyPrice * 100) : 0;
+    const cls = pct >= 0 ? 'up' : 'down';
+
+    rows += `<tr>
+      <td class="ticker">${h.ticker}</td>
+      <td>${h.name}</td>
+      <td class="price-cell">${h.qty}</td>
+      <td class="price-cell">${fmt(h.buyPrice, h.currency)}</td>
+      <td class="price-cell">${cur ? fmt(cur, h.currency) : '<span style="color:var(--muted)">—</span>'}</td>
+      <td><span class="badge ${cls}">${cur ? fmtPct(pct) : '—'}</span></td>
+    </tr>`;
+  });
+
+  tbody.innerHTML = rows;
+
+  // Metrics
+  const profit = totalEvalKRW - totalBuyKRW;
+  const pct = totalBuyKRW > 0 ? (profit / totalBuyKRW * 100) : 0;
+
+  document.getElementById('totalValue').textContent = '₩' + Math.round(totalEvalKRW).toLocaleString('ko-KR');
+  document.getElementById('totalValue').className = 'metric-value';
+
+  const profitEl = document.getElementById('totalProfit');
+  profitEl.textContent = (profit >= 0 ? '+' : '') + '₩' + Math.round(profit).toLocaleString('ko-KR');
+  profitEl.className = 'metric-value ' + (profit >= 0 ? 'up' : 'down');
+
+  document.getElementById('totalBuy').textContent = '매입 ₩' + Math.round(totalBuyKRW).toLocaleString('ko-KR');
+  document.getElementById('totalPct').textContent = '수익률 ' + fmtPct(pct);
+  document.getElementById('holdCount').textContent = holdings.length;
+  document.getElementById('holdSub').textContent = '총 ' + holdings.reduce((a, h) => a + (h.qty || 0), 0) + '주 보유';
+}
+
+// ── RENDER WATCHLIST ─────────────────────────────
+function renderWatchlist(watchlist) {
+  document.getElementById('watchCount').textContent = watchlist.length;
+  if (!watchlist.length) {
+    document.getElementById('watchlistDiv').innerHTML = '<div style="text-align:center;color:var(--muted);padding:24px;font-size:13px">관심 종목 없음</div>';
+    return;
+  }
+  document.getElementById('watchlistDiv').innerHTML = watchlist.map(w => {
+    const price = w.currentPrice;
+    return `<div class="watch-item">
+      <div>
+        <div class="watch-ticker">${w.ticker}</div>
+        <div class="watch-name">${w.name}</div>
+      </div>
+      <div>
+        <div class="watch-price">${price ? fmt(price, w.currency) : '<span style="color:var(--muted)">—</span>'}</div>
+        <div class="watch-change" style="color:var(--muted);font-size:11px">실시간</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── RENDER CHART ─────────────────────────────────
+function renderChart(holdings) {
+  // 오늘 수익률 계산
+  let totalBuy = 0, totalEval = 0;
+  holdings.forEach(h => {
+    if (!h.currentPrice) return;
+    const rate = h.currency === 'KRW' ? 1 : USD_KRW;
+    totalBuy  += h.buyPrice * h.qty * rate;
+    totalEval += h.currentPrice * h.qty * rate;
+  });
+  const todayPct = totalBuy > 0 ? ((totalEval - totalBuy) / totalBuy * 100) : 0;
+
+  const chartData = perfHistory.data.map((v, i) => i === perfHistory.data.length - 1 ? parseFloat(todayPct.toFixed(2)) : v);
+
+  if (perfChartInst) perfChartInst.destroy();
+  perfChartInst = new Chart(document.getElementById('perfChart'), {
+    type: 'line',
+    data: {
+      labels: perfHistory.labels,
+      datasets: [{
+        label: '수익률 (%)',
+        data: chartData,
+        borderColor: '#00e5a0',
+        backgroundColor: 'rgba(0,229,160,0.07)',
+        fill: true, tension: 0.4,
+        pointRadius: 5, pointBackgroundColor: '#00e5a0',
+        pointBorderColor: '#0a0e1a', pointBorderWidth: 2, borderWidth: 2,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.parsed.y >= 0 ? '+' : ''}${ctx.parsed.y.toFixed(2)}%` } }
+      },
+      scales: {
+        x: { ticks: { color: '#4a5568', font: { size: 12 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
+        y: { ticks: { color: '#4a5568', font: { size: 12 }, callback: v => v + '%' }, grid: { color: 'rgba(255,255,255,0.04)' } }
+      }
+    }
+  });
+}
+
+// ── MODAL ────────────────────────────────────────
+function openModal() { document.getElementById('modalBg').classList.add('open'); }
+function closeModal() { document.getElementById('modalBg').classList.remove('open'); }
+
+// ── INIT ─────────────────────────────────────────
+loadData();
+setInterval(loadData, 5 * 60 * 1000); // 5분마다 자동 갱신
+</script>
+</body>
+</html>
